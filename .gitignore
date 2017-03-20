@@ -87,3 +87,7 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+#CognitiveAudio files
+.idea/
+audiosamples/

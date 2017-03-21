@@ -1,12 +1,18 @@
 import requests
+from time import sleep
 
-API_KEY = 'ce05ba202aa14a13875966f46846ef98'
+API_KEY = ''
 
 def getProfilesFromMicrosoft():
     request = requests.get('https://westus.api.cognitive.microsoft.com/spid/v1.0/identificationProfiles',
                            headers = {
                                'Ocp-Apim-Subscription-Key': API_KEY
                            })
+
+    if(request.status_code == 429):
+        print("Rate Limit Exceeded (Code %s)" % request.status_code)
+        sleep(10)
+        return getProfilesFromMicrosoft()
 
     return request.json()
 
@@ -20,6 +26,11 @@ def createMicrosoftProfile():
                                 "locale": "en-us"
                             })
 
+    if (request.status_code == 429):
+        print("Rate Limit Exceeded (Code %s)" % request.status_code)
+        sleep(10)
+        return createMicrosoftProfile()
+
     return request.json()['identificationProfileId']
 
 def createMicrosoftEnrollment(profileID, audioFilePath):
@@ -31,7 +42,12 @@ def createMicrosoftEnrollment(profileID, audioFilePath):
                                 "file": open(audioFilePath, "rb")
                             })
 
-    return request.status_code
+    if (request.status_code == 429):
+        print("Rate Limit Exceeded (Code %s)" % request.status_code)
+        sleep(10)
+        return createMicrosoftEnrollment(profileID, audioFilePath)
+
+    return [request.status_code, request.headers]
 
 def identifySpeaker(audioFilePath, candidateIDs):
     idString = ','.join(candidateIDs)
@@ -45,7 +61,12 @@ def identifySpeaker(audioFilePath, candidateIDs):
             "file": open(audioFilePath, "rb")
         })
 
-    return request.headers['Operation-Location']
+    if (request.status_code == 429):
+        print("Rate Limit Exceeded (Code %s)" % request.status_code)
+        sleep(10)
+        return identifySpeaker(audioFilePath, candidateIDs)
+
+    return getMicrosoftOperationResult(request.headers['Operation-Location'])
 
 def getMicrosoftOperationResult(requestUrl):
     request = requests.get(requestUrl,
@@ -54,10 +75,20 @@ def getMicrosoftOperationResult(requestUrl):
                             })
 
     json = request.json()
-    if json['status'] == "notstarted" or json['status'] == "running":
+
+    if (request.status_code == 429):
+        print("Rate Limit Exceeded (Code %s)" % request.status_code)
+        sleep(10)
         return getMicrosoftOperationResult(requestUrl)
-    elif json['status'] == "failed":
-        raise AssertionError("Failed to Execute Operation")
+
+    try:
+        if json['status'] == "notstarted" or json['status'] == "running":
+            return getMicrosoftOperationResult(requestUrl)
+        elif json['status'] == "failed":
+            raise AssertionError("Failed to Execute Operation")
+    except KeyError as e:
+        print("Invalid key: %s" % e)
+        print("Response: %s (%s)" % (request.text, request.status_code))
 
     return json
 
@@ -68,15 +99,25 @@ def deleteMicrosoftProfile(profileID):
             'Ocp-Apim-Subscription-Key': API_KEY
         })
 
+    if (request.status_code == 429):
+        print("Rate Limit Exceeded (Code %s)" % request.status_code)
+        sleep(10)
+        return deleteMicrosoftProfile(profileID)
+
     return request.status_code
 
-#createMicrosoftProfile()
-#createMicrosoftEnrollment(createMicrosoftProfile(), "audiosamples/enrol-royo.wav")
-#getProfilesFromMicrosoft()
-#createMicrosoftEnrollment("ac25bd0b-7340-43e3-ae81-662fe571ac14", "audiosamples/enrol-ricky.wav")
-profiles = list(map(lambda x: x['identificationProfileId'], getProfilesFromMicrosoft()))
-for profile in profiles:
-    deleteMicrosoftProfile(profile)
-#identifySpeaker('audiosamples/enrol-luis.wav', profiles)
-#statusUrl = identifySpeaker('audiosamples/phrase-ricky.wav', profiles)
-#print(getMicrosoftOperationResult(statusUrl))
+def deleteAllProfiles():
+    profiles = list(map(lambda x: x['identificationProfileId'], getProfilesFromMicrosoft()))
+    for profile in profiles:
+        deleteMicrosoftProfile(profile)
+
+
+if __name__ == '__main__':
+    #createMicrosoftProfile()
+    #createMicrosoftEnrollment(createMicrosoftProfile(), "audiosamples/enrol-royo.wav")
+    getProfilesFromMicrosoft()
+    #createMicrosoftEnrollment("ac25bd0b-7340-43e3-ae81-662fe571ac14", "audiosamples/enrol-ricky.wav")
+    #profiles = list(map(lambda x: x['identificationProfileId'], getProfilesFromMicrosoft()))
+    #identifySpeaker('audiosamples/enrol-luis.wav', profiles)
+    #statusUrl = identifySpeaker('audiosamples/phrase-ricky.wav', profiles)
+    #print(getMicrosoftOperationResult(statusUrl))

@@ -91,3 +91,8 @@ ENV/
 #CognitiveAudio files
 .idea/
 audiosamples/
+*.wav
+
+#local jsons
+config.json
+users.json

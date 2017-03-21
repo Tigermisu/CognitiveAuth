@@ -62,7 +62,7 @@ def add_silence(snd_data, seconds):
     r.extend([0 for i in range(int(seconds*RATE))])
     return r
 
-def record():
+def record(timeConstrain):
     """
     Record a word or words from the microphone and
     return the data as an array of signed shorts.
@@ -79,11 +79,12 @@ def record():
         frames_per_buffer=CHUNK_SIZE)
 
     num_silent = 0
-    max_silent_samples = 90
+    max_silent_samples = 30
     snd_started = False
 
     r = array('h')
     iterations = 0
+    startTime = 0
     while 1:
         # little endian, signed short
         snd_data = array('h', stream.read(CHUNK_SIZE))
@@ -92,18 +93,20 @@ def record():
         r.extend(snd_data)
 
         silent = is_silent(snd_data)
-        if iterations < 100:
+        if iterations < 20:
             iterations += 1
-            #threshold = BASE_THRESHOLD + reduce(lambda x, y: abs(x) + abs(y), snd_data) / len(snd_data) #Avg noise
-            threshold = BASE_THRESHOLD + max(snd_data)
-            if(iterations == 100):
+            if(iterations == 20):
+                #threshold = BASE_THRESHOLD + reduce(lambda x, y: abs(x) + abs(y), snd_data) / len(snd_data) #Avg noise
+                threshold = BASE_THRESHOLD + max(snd_data)
                 print("please speak a word into the microphone")
-        elif silent and snd_started:
+        elif silent and snd_started and timeConstrain == 0:
             num_silent += 1
         elif not silent and not snd_started:
             snd_started = True
-            print(str(threshold))
-        if snd_started and num_silent > max_silent_samples:
+            if timeConstrain > 0:
+                startTime = time()
+        if snd_started and ((num_silent > max_silent_samples and timeConstrain == 0)
+                            or (timeConstrain > 0 and time() - startTime > timeConstrain)):
             break
         elif snd_started and not silent:
             num_silent = 0
@@ -118,9 +121,9 @@ def record():
     r = add_silence(r, 0.5)
     return sample_width, r
 
-def record_to_file(path):
+def record_to_file(path, timeConstrain = 0):
     "Records from the microphone and outputs the resulting data to 'path'"
-    sample_width, data = record()
+    sample_width, data = record(timeConstrain)
     data = pack('<' + ('h'*len(data)), *data)
 
     wf = wave.open(path, 'wb')
@@ -128,7 +131,6 @@ def record_to_file(path):
     wf.setsampwidth(sample_width)
     wf.setframerate(RATE)
     wf.writeframes(data)
-    ##post to microsoft server's goes here
     wf.close()
 
 if __name__ == '__main__':
